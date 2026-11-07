@@ -3,4 +3,3 @@ __pycache__/
 imagewoof_train/
 imagewoof_val/
 *.zip
-*.pth
