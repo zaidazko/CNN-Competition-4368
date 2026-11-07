@@ -1,4 +1,5 @@
 
+import torch.nn as nn
 import torch
 from torchvision import datasets, transforms
 from torch.utils.data import DataLoader
@@ -25,20 +26,11 @@ val_dataset = datasets.ImageFolder(
 )
 
 # Step 4: Required class order from classes.txt
-class_names = [
-    "shih_tzu",
-    "rhodesian_ridgeback",
-    "beagle",
-    "english_foxhound",
-    "border_terrier",
-    "australian_terrier",
-    "golden_retriever",
-    "old_english_sheepdog",
-    "samoyed",
-    "dingo"
-]
+class_names = "classes.txt"
 
 # Step 5: Correct class labels for both datasets
+
+
 def apply_class_order(dataset):
     mapping = {
         dataset.class_to_idx[name]: idx
@@ -109,12 +101,11 @@ assert train_dataset.class_to_idx["dingo"] == 9
 print("\nSUCCESS: Dataset is ready for CNN training!")
 
 
-
 # STAGE 2: BUILD CNN ARCHITECTURE
 
-import torch.nn as nn
 
 # Define our custom CNN
+
 class DogBreedCNN(nn.Module):
     def __init__(self):
         super().__init__()
