@@ -1,8 +1,8 @@
-#     NAME   :   ID    
-#Rakib Khalil : 1979020
-#Zaid Azkoul : 2261703
-#Ali Shaikh : 2334342
-#Yousif Husni: 2169551
+#     NAME   :   ID
+# Rakib Khalil : 1979020
+# Zaid Azkoul : 2261703
+# Ali Shaikh : 2334342
+# Yousif Husni: 2169551
 
 
 import argparse
@@ -58,7 +58,8 @@ def apply_class_order(dataset, class_names):
         dataset.class_to_idx[name]: idx
         for idx, name in enumerate(class_names)
     }
-    dataset.samples = [(path, mapping[label]) for path, label in dataset.samples]
+    dataset.samples = [(path, mapping[label])
+                       for path, label in dataset.samples]
     dataset.targets = [mapping[label] for label in dataset.targets]
     dataset.imgs = dataset.samples
     dataset.classes = list(class_names)
@@ -84,12 +85,15 @@ class NeuralNet(nn.Module):
         self.layers = nn.Sequential(
             *block(3, 64), *block(64, 64), nn.MaxPool2d(2),  # 128 -> 64
             *block(64, 128), *block(128, 128), nn.MaxPool2d(2),  # 64 -> 32
-            *block(128, 256), *block(256, 256), *block(256, 256), nn.MaxPool2d(2),  # 32 -> 16
-            *block(256, 384), *block(384, 384), *block(384, 384), nn.MaxPool2d(2),  # 16 -> 8
-            *block(384, 512), *block(512, 512), *block(512, 512), nn.MaxPool2d(2),  # 8 -> 4
+            *block(128, 256), *block(256, 256), *
+            block(256, 256), nn.MaxPool2d(2),  # 32 -> 16
+            *block(256, 384), *block(384, 384), *
+            block(384, 384), nn.MaxPool2d(2),  # 16 -> 8
+            *block(384, 512), *block(512, 512), *
+            block(512, 512), nn.MaxPool2d(2),  # 8 -> 4
             nn.AdaptiveAvgPool2d(1),
             nn.Flatten(),
-            nn.Dropout(0.3),
+            nn.Dropout(0.5),
             nn.Linear(512, num_classes),
         )
 
@@ -127,7 +131,7 @@ def predict(model, images):
     batch_size = 32
     model.eval()
     for start in range(0, len(images), batch_size):
-        batch = images[start : start + batch_size]
+        batch = images[start: start + batch_size]
         x = torch.from_numpy(batch).to(device=device, dtype=torch.float32)
         x = x.permute(0, 3, 1, 2) / 255.0
         x = (x - mean) / std
@@ -137,20 +141,22 @@ def predict(model, images):
     return np.concatenate(preds).astype(np.int64)
 
 
-def build_loaders(batch_size=32, num_workers=2):
+def build_loaders(batch_size=64, num_workers=4):
     train_transform = transforms.Compose([
-        transforms.RandomResizedCrop(128, scale=(0.35, 1.0)),
+        transforms.RandomResizedCrop(128, scale=(0.25, 1.0)),
         transforms.RandomHorizontalFlip(),
         transforms.ColorJitter(0.3, 0.3, 0.3, 0.05),
         transforms.ToTensor(),
         transforms.Normalize(MEAN, STD),
+        transforms.RandomErasing(p=0.5, scale=(0.02, 0.2)),
     ])
     val_transform = transforms.Compose([
         transforms.ToTensor(),
         transforms.Normalize(MEAN, STD),
     ])
 
-    train_dataset = datasets.ImageFolder(root=TRAIN_PATH, transform=train_transform)
+    train_dataset = datasets.ImageFolder(
+        root=TRAIN_PATH, transform=train_transform)
     val_dataset = datasets.ImageFolder(root=VAL_PATH, transform=val_transform)
 
     class_names = load_class_names()
@@ -163,10 +169,14 @@ def build_loaders(batch_size=32, num_workers=2):
         print(f"  {idx}: {name}")
 
     train_loader = torch.utils.data.DataLoader(
-        train_dataset, batch_size=batch_size, shuffle=True, num_workers=num_workers
+        train_dataset, batch_size=batch_size, shuffle=True,
+        num_workers=num_workers, pin_memory=True,
+        persistent_workers=num_workers > 0,
     )
     val_loader = torch.utils.data.DataLoader(
-        val_dataset, batch_size=batch_size, shuffle=False, num_workers=num_workers
+        val_dataset, batch_size=200, shuffle=False,
+        num_workers=num_workers, pin_memory=True,
+        persistent_workers=num_workers > 0,
     )
     return train_dataset, val_dataset, train_loader, val_loader, class_names
 
@@ -178,13 +188,15 @@ def evaluate(weights_path="model.pth"):
 
     _, val_dataset, _, _, class_names = build_loaders(num_workers=0)
     model = load_model(weights_path)
-    print(f"Loaded {weights_path} ({sum(p.numel() for p in model.parameters()) / 1e6:.2f}M params)")
+    print(
+        f"Loaded {weights_path} ({sum(p.numel() for p in model.parameters()) / 1e6:.2f}M params)")
 
     # Harness-style check: raw uint8 images -> predict()
     images = []
     labels = []
     for path, label in val_dataset.samples:
-        img = np.asarray(Image.open(path).convert("RGB").resize((128, 128)), dtype=np.uint8)
+        img = np.asarray(Image.open(path).convert(
+            "RGB").resize((128, 128)), dtype=np.uint8)
         images.append(img)
         labels.append(label)
     images = np.stack(images, axis=0)
@@ -192,7 +204,8 @@ def evaluate(weights_path="model.pth"):
 
     preds = predict(model, images)
     val_acc = (preds == labels).mean()
-    print(f"Validation accuracy: {val_acc:.3f} ({int((preds == labels).sum())}/{len(labels)})")
+    print(
+        f"Validation accuracy: {val_acc:.3f} ({int((preds == labels).sum())}/{len(labels)})")
     return float(val_acc)
 
 
@@ -214,7 +227,7 @@ def train(num_epochs=150, save_path="model.pth", seed=SEED):
         lr=0.1,
         momentum=0.9,
         nesterov=True,
-        weight_decay=5e-4,
+        weight_decay=1e-3,
     )
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
         optimizer, T_max=num_epochs
@@ -292,13 +305,15 @@ def train(num_epochs=150, save_path="model.pth", seed=SEED):
             print(f"  saved new best model to {save_path}")
 
     total_time = time.time() - start_time
-    print(f"Done in {total_time / 60:.1f} min. Best val accuracy: {best_acc:.3f}")
+    print(
+        f"Done in {total_time / 60:.1f} min. Best val accuracy: {best_acc:.3f}")
     return best_acc
 
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("mode", nargs="?", default="eval", choices=["eval", "train"])
+    parser.add_argument("mode", nargs="?", default="eval",
+                        choices=["eval", "train"])
     parser.add_argument("--weights", default="model.pth")
     parser.add_argument("--epochs", type=int, default=150)
     args = parser.parse_args()
